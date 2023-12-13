@@ -34,7 +34,8 @@ class RabbitMQTestConsumer(StartUpConsumerMixin):
         self.connection = connection
 
     async def startup(self):
-        self.connection = self.di_container.resolve(AbstractRobustConnection)
+        if not self.connection:
+            self.connection = self.di_container.resolve(AbstractRobustConnection)
         await asyncio.create_task(self._consume())
         logger.info("Consumer %s has been created", self)
 
