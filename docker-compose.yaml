@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+
+  rabbitmq:
+    container_name: rabbitmq
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  application:
+    container_name: application
+    build:
+      context: .
+      dockerfile: infra/Dockerfile
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    # env_file:
+    #   - ./src/.env
+    volumes:
+      - .:/opt/app
+    command: uvicorn src.app.main:app --host 0.0.0.0 --port 8000 --reload
