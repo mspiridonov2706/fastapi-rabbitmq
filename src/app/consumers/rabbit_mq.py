@@ -1,58 +1,24 @@
-import abc
 import asyncio
 import logging
 
-from aio_pika.abc import AbstractIncomingMessage, AbstractRobustConnection, ExchangeType
+from aio_pika.abc import AbstractRobustConnection
 from rodi import Container
 
 from src.app.consumers.base_consumer import StartUpConsumerMixin
+from src.consumers.rabbit_mq_consumer import RabbitMQConsumer
+from src.handlers.test_handler import TestHandler
 
 
 logger = logging.getLogger().getChild("consumer")
 
 
-class ABCMessageHandler(abc.ABC):
-    @abc.abstractmethod
-    async def __call__(self, message: str):
-        raise NotImplementedError
-
-
-class TestHandler(ABCMessageHandler):
-    async def __call__(self, message: str):
-        print(message)
-
-
-class RabbitMQTestConsumer(StartUpConsumerMixin):
-    def __init__(
-        self,
-        di_container: Container,
-        handler: ABCMessageHandler,
-        connection: AbstractRobustConnection | None = None,
-    ) -> None:
+class RabbitMQStartupConsumer(StartUpConsumerMixin):
+    def __init__(self, di_container: Container) -> None:
         self.di_container = di_container
-        self.message_handler = handler
-        self.connection = connection
 
     async def startup(self):
-        if not self.connection:
-            self.connection = self.di_container.resolve(AbstractRobustConnection)
-        await asyncio.create_task(self._consume())
+        connection = self.di_container.resolve(AbstractRobustConnection)
+        handler = TestHandler()
+        consumer = RabbitMQConsumer(connection=connection, handler=handler)
+        await asyncio.create_task(consumer.consume())
         logger.info("Consumer %s has been created", self)
-
-    async def _consume(self) -> None:
-        if not self.connection:
-            return None
-
-        channel = await self.connection.channel()
-        logs_exchange = await channel.declare_exchange("test3", ExchangeType.FANOUT)
-        queue = await channel.declare_queue()
-
-        await queue.bind(logs_exchange)
-        await queue.consume(self._proccess_message, no_ack=False)
-
-    async def _proccess_message(self, message: AbstractIncomingMessage | None) -> None:
-        if not message:
-            return None
-
-        await self.message_handler(str(message.body))
-        await message.ack()
